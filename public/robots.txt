@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://www.pariteconsults.com.ng/sitemap.xml
