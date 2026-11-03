@@ -120,6 +120,7 @@ export default function CookingItems() {
     filterCategory,
     toggleCart,
     orders = [],
+    refreshCookingItems,
   } = useMyContext();
 
   // persist local wishlist
@@ -1026,6 +1027,7 @@ export default function CookingItems() {
             }
           }
         }
+        await refreshCookingItems?.(true);
         toast.success("Product Updated ✔");
       } else {
         let computedQty = 0;
@@ -1054,6 +1056,7 @@ export default function CookingItems() {
           }),
         );
 
+        await refreshCookingItems?.(true);
         toast.success("Product Added ✔");
       }
 
@@ -1099,6 +1102,7 @@ export default function CookingItems() {
     if (!window.confirm("Are you sure you want to delete this beauty product?")) return;
     try {
       await deleteDoc(doc(db, ...folangeProductPath(item.id)));
+      await refreshCookingItems?.(true);
       toast.success("Beauty product deleted");
       setSelectedItem(null);
     } catch (err) {

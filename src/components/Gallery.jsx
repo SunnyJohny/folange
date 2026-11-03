@@ -7,8 +7,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  doc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  increment,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { useMyContext } from "../Context/MyContext";
 import {
   FOLANGE_MEDIA_ROOT,
   folangeCollectionPath,
@@ -34,7 +40,24 @@ const initialForm = {
   file: null,
 };
 
+// Stable id so signed-out visitors can like once per browser.
+const getVisitorId = () => {
+  try {
+    let id = localStorage.getItem("folange_gallery_visitor");
+    if (!id) {
+      id = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem("folange_gallery_visitor", id);
+    }
+    return id;
+  } catch {
+    return "guest_anonymous";
+  }
+};
+
 export default function Gallery() {
+  const { currentUser } = useMyContext() || {};
+  const [commentText, setCommentText] = useState("");
+  const [commentName, setCommentName] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -232,6 +255,109 @@ export default function Gallery() {
     }
   };
 
+  const actorId = currentUser?.uid || getVisitorId();
+
+  const isLiked = (item) => (item.likedBy || []).includes(actorId);
+
+  const toggleLike = async (item) => {
+    const liked = isLiked(item);
+    try {
+      await updateDoc(doc(db, ...folangeCollectionPath("gallery"), item.id), {
+        likedBy: liked ? arrayRemove(actorId) : arrayUnion(actorId),
+        likesCount: increment(liked ? -1 : 1),
+      });
+    } catch (error) {
+      console.error("Gallery like failed:", error);
+      toast.error("Unable to update like.");
+    }
+  };
+
+  const shareItem = async (item) => {
+    const url = `${window.location.origin}/#gallery`;
+    const data = {
+      title: item.title || "Folange Beauty Lounge",
+      text: item.caption || "See this on Folange Beauty Lounge",
+      url,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied.");
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") toast.error("Unable to share.");
+    }
+  };
+
+  const submitComment = async (event) => {
+    event.preventDefault();
+    const text = commentText.trim();
+    if (!text || !selectedMedia) return;
+
+    const author =
+      currentUser?.displayName ||
+      currentUser?.name ||
+      commentName.trim() ||
+      "Guest";
+
+    try {
+      await updateDoc(
+        doc(db, ...folangeCollectionPath("gallery"), selectedMedia.id),
+        {
+          comments: arrayUnion({
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            text: text.slice(0, 500),
+            author,
+            userId: actorId,
+            createdAtMs: Date.now(),
+          }),
+        }
+      );
+      setCommentText("");
+    } catch (error) {
+      console.error("Gallery comment failed:", error);
+      toast.error("Unable to post comment.");
+    }
+  };
+
+  // Keep the open preview in sync with live Firestore updates.
+  const liveSelected = selectedMedia
+    ? items.find((i) => i.id === selectedMedia.id) || selectedMedia
+    : null;
+
+  const ActionBar = ({ item, onComments }) => (
+    <div className="flex items-center gap-5 px-4 pb-4 text-sm text-[#786653]">
+      <button
+        type="button"
+        onClick={() => toggleLike(item)}
+        className={`flex items-center gap-1 font-semibold transition hover:text-[#A77B38] ${
+          isLiked(item) ? "text-red-500" : ""
+        }`}
+        aria-label="Like"
+      >
+        {isLiked(item) ? "♥" : "♡"} {Math.max(item.likesCount || 0, 0)}
+      </button>
+      <button
+        type="button"
+        onClick={onComments}
+        className="flex items-center gap-1 font-semibold transition hover:text-[#A77B38]"
+        aria-label="Comments"
+      >
+        💬 {(item.comments || []).length}
+      </button>
+      <button
+        type="button"
+        onClick={() => shareItem(item)}
+        className="flex items-center gap-1 font-semibold transition hover:text-[#A77B38]"
+        aria-label="Share"
+      >
+        ↗ Share
+      </button>
+    </div>
+  );
+
   // Close the upload modal.
   const closeUploadModal = () => {
     if (submitting) return;
@@ -302,9 +428,8 @@ export default function Gallery() {
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item, index) => (
-              <motion.button
+              <motion.div
                 key={item.id}
-                type="button"
                 layout
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -312,8 +437,12 @@ export default function Gallery() {
                   duration: 0.3,
                   delay: index * 0.04,
                 }}
+                className="group overflow-hidden rounded-2xl border border-[#E9DDCA] bg-white text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+              >
+              <button
+                type="button"
                 onClick={() => setSelectedMedia(item)}
-                className="group overflow-hidden rounded-2xl border border-[#E9DDCA] bg-white text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C5A15B]"
+                className="block w-full text-left focus:outline-none focus:ring-2 focus:ring-[#C5A15B]"
                 aria-label={`View ${item.title || "gallery media"}`}
               >
                 <div className="relative h-72 overflow-hidden bg-[#F0E7D9]">
@@ -360,7 +489,9 @@ export default function Gallery() {
                     </p>
                   )}
                 </div>
-              </motion.button>
+              </button>
+              {ActionBar({ item, onComments: () => setSelectedMedia(item) })}
+              </motion.div>
             ))}
           </div>
         )}
@@ -568,7 +699,7 @@ export default function Gallery() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
               onClick={(event) => event.stopPropagation()}
-              className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-[#FFFCF7] shadow-2xl"
+              className="relative max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-[#FFFCF7] shadow-2xl"
               role="dialog"
               aria-modal="true"
               aria-label={selectedMedia.title || "Gallery preview"}
@@ -609,6 +740,58 @@ export default function Gallery() {
                   </p>
                 )}
               </div>
+
+              {liveSelected && (
+                <div className="border-t border-[#E9DDCA]">
+                  <div className="pt-3">
+                    {ActionBar({ item: liveSelected, onComments: () => {} })}
+                  </div>
+
+                  <div className="max-h-48 space-y-3 overflow-y-auto px-5 pb-3">
+                    {(liveSelected.comments || []).length === 0 ? (
+                      <p className="text-sm text-[#A89A88]">
+                        No comments yet. Be the first!
+                      </p>
+                    ) : (
+                      [...liveSelected.comments]
+                        .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
+                        .map((c) => (
+                          <p key={c.id} className="text-sm text-[#493522]">
+                            <span className="font-semibold">{c.author}: </span>
+                            {c.text}
+                          </p>
+                        ))
+                    )}
+                  </div>
+
+                  <form
+                    onSubmit={submitComment}
+                    className="flex flex-col gap-2 px-5 pb-5 sm:flex-row"
+                  >
+                    {!currentUser && (
+                      <input
+                        value={commentName}
+                        onChange={(e) => setCommentName(e.target.value)}
+                        placeholder="Your name"
+                        className="rounded-xl border border-[#D8C5A5] px-3 py-2 text-sm sm:w-36"
+                      />
+                    )}
+                    <input
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      placeholder="Add a comment..."
+                      maxLength={500}
+                      className="flex-1 rounded-xl border border-[#D8C5A5] px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-[#A77B38] px-4 py-2 text-sm font-semibold text-white hover:bg-[#493522]"
+                    >
+                      Post
+                    </button>
+                  </form>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

@@ -959,7 +959,8 @@ export const MyContextProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    refreshCookingItems();
+    // Always fetch fresh on load so newly added products are never hidden by the cache.
+    refreshCookingItems(true);
   }, [refreshCookingItems]);
 
   // -------------------------------------------
