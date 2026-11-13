@@ -752,7 +752,7 @@ const Navbar = () => {
   const navItems = [
     { link: "Home", path: "home" },
     { link: "Store", path: "store" },
-    { link: "Academy", path: "academy" },
+    // { link: "Academy", path: "academy" },
     { link: "Gallery", path: "gallery" },
     { link: "About", path: "about" },
     { link: "Services", path: "services" },

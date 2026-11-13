@@ -10,7 +10,10 @@ import Footer from "./components/Footer";
 import Hero from "./components/Hero";
 import Navbar from "./components/Navbar";
 import Dishes from "./components/FoodDisplay";
-import Academy from "./components/Academy";
+
+// Academy temporarily disabled
+// import Academy from "./components/Academy";
+
 import CookingItemDetail from "./components/CookingItemDetail";
 import BottomNav from "./components/BottomNav";
 import HomeCategorySlider from "./components/HomeCategorySlider";
@@ -94,8 +97,8 @@ function App() {
               {/* Folange Beauty Store */}
               <Dishes />
 
-              {/* Folange Beauty Academy */}
-              <Academy />
+              {/* Folange Beauty Academy temporarily disabled */}
+              {/* <Academy /> */}
 
               {/* Public Folange Gallery */}
               <Gallery />
